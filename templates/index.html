@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Real-time Speech Therapy</title>
+</head>
+<body>
+    <h1>Real-time Speech Therapy</h1>
+    <button id="record">Record</button>
+    <button id="stop">Stop</button>
+    <p id="transcription"></p>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script>
+        const recordButton = document.getElementById('record');
+        const stopButton = document.getElementById('stop');
+        const transcription = document.getElementById('transcription');
+
+        const socket = io();
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        recordButton.addEventListener('click', () => {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+
+                    mediaRecorder.addEventListener('stop', () => {
+                        const audioBlob = new Blob(audioChunks);
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            const base64AudioMessage = reader.result.split(',')[1];
+                            socket.emit('audio_message', { audio: base64AudioMessage });
+                        };
+                    });
+                });
+        });
+
+        stopButton.addEventListener('click', () => {
+            mediaRecorder.stop();
+        });
+
+        socket.on('text_response', data => {
+            transcription.textContent = data.text;
+        });
+    </script>
+</body>
+</html>
