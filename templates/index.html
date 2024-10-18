@@ -2,53 +2,92 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Real-time Speech Therapy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Therapy App</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        #record-button {
+            background-color: red;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #record-button.recording {
+            background-color: green;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 1.2em;
+        }
+        #conversation {
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Real-time Speech Therapy</h1>
-    <button id="record">Record</button>
-    <button id="stop">Stop</button>
-    <p id="transcription"></p>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <h1>Speech Therapy App</h1>
+    <button id="record-button">Start Recording</button>
+    <div id="status"></div>
+    <div id="conversation"></div>
+
     <script>
-        const recordButton = document.getElementById('record');
-        const stopButton = document.getElementById('stop');
-        const transcription = document.getElementById('transcription');
-
         const socket = io();
-
+        const recordButton = document.getElementById('record-button');
+        const statusDiv = document.getElementById('status');
+        const conversationDiv = document.getElementById('conversation');
+        let isRecording = false;
         let mediaRecorder;
         let audioChunks = [];
 
         recordButton.addEventListener('click', () => {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    mediaRecorder.start();
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    });
 
-                    mediaRecorder.addEventListener('dataavailable', event => {
-                        audioChunks.push(event.data);
-                    });
+     function startRecording() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    audioChunks = [];
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const base64AudioMessage = reader.result.split(',')[1];
+                        console.log("Sending audio to server");  // Add this line
+                        socket.emit('audio_message', base64AudioMessage);
+                    };
+                    reader.readAsDataURL(audioBlob);
+                };
+                isRecording = true;
+                recordButton.textContent = 'Stop Recording';
+                recordButton.classList.add('recording');
+                statusDiv.textContent = 'Recording...';
+            });
+    }
 
-                    mediaRecorder.addEventListener('stop', () => {
-                        const audioBlob = new Blob(audioChunks);
-                        const reader = new FileReader();
-                        reader.readAsDataURL(audioBlob);
-                        reader.onloadend = () => {
-                            const base64AudioMessage = reader.result.split(',')[1];
-                            socket.emit('audio_message', { audio: base64AudioMessage });
-                        };
-                    });
-                });
-        });
+    function stopRecording() {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordButton.textContent = 'Start Recording';
+        recordButton.classList.remove('recording');
+        statusDiv.textContent = '';
+    }
 
-        stopButton.addEventListener('click', () => {
-            mediaRecorder.stop();
-        });
-
-        socket.on('text_response', data => {
-            transcription.textContent = data.text;
-        });
-    </script>
+    socket.on('response', response => {
+        const messageDiv = document.createElement('div');
+        messageDiv.textContent = `Bot: ${response}`;
+        conversationDiv.appendChild(messageDiv);
+    });
+</script>
 </body>
 </html>
