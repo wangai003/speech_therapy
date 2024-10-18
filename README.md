@@ -1,4 +1,4 @@
-# Speech Therapy Chatbot
+# Speech Therapy
 
 
 
